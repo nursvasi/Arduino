@@ -1,0 +1,177 @@
+#include <Adafruit_SSD1306.h>
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+
+#define SCREEN_WIDTH 128 
+#define SCREEN_HEIGHT 64 
+#define OLED_RESET     -1 
+#define SCREEN_ADDRESS 0x3C 
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+
+const int joyXPin = 34;
+const int joyYPin = 35;
+const int joyButtonPin = 32;
+
+int snakeX, snakeY;
+int foodX, foodY;
+int score;
+bool gameover;
+
+enum Direction { UP, DOWN, LEFT, RIGHT };
+Direction currentDirection;
+
+const int maxSegments = 100; 
+int snakeSegmentsX[maxSegments];
+int snakeSegmentsY[maxSegments];
+int snakeLength;
+
+void setup() {
+  // OLED ekran başlatılır
+  Serial.begin(115200);
+  pinMode(joyXPin, INPUT);
+  pinMode(joyYPin, INPUT);
+  pinMode(joyButtonPin, INPUT_PULLUP);
+  if (!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
+    Serial.println(F("SSD1306 allocation failed"));
+    for (;;); 
+  }
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+  display.setCursor(0, 0);
+  display.println("Game Start");
+  display.display();
+  delay(2000);
+  display.clearDisplay();
+
+  // Oyun başlatma değerleri atanır
+  snakeX = SCREEN_WIDTH / 2;
+  snakeY = SCREEN_HEIGHT / 2;
+  foodX = random(SCREEN_WIDTH);
+  foodY = random(SCREEN_HEIGHT);
+  score = 0;
+  gameover = false;
+  currentDirection = RIGHT;
+  snakeLength = 1;
+  snakeSegmentsX[0] = snakeX;
+  snakeSegmentsY[0] = snakeY;
+}
+
+void loop() {
+    // Oyun devam ettiği sürece döngü çalışır
+  if (!gameover) {
+    readJoystick();
+    moveSnake();
+    checkCollision();
+    checkFood();
+    drawScreen();
+    delay(200); // Oyun hızını kontrol etmek için bir gecikme eklenir
+  }
+}
+void readJoystick() {
+  // Joystick'in okuma değerleri alınır
+  int joyX = analogRead(joyXPin);
+  int joyY = analogRead(joyYPin);
+
+  // Joystick'in hareketine göre yılanın yönü belirlenir
+  if (joyX < 1000) {
+    currentDirection = RIGHT;
+  } else if (joyX > 3000) {
+    currentDirection = LEFT;
+  }
+
+  if (joyY < 1000) {
+    currentDirection = DOWN;
+  } else if (joyY > 3000) {
+    currentDirection = UP;
+  }
+}
+
+void moveSnake() {
+  // Yılanın başı hareket ettirilir
+  switch (currentDirection) {
+    case UP:
+      snakeY--;
+      break;
+    case DOWN:
+      snakeY++;
+      break;
+    case LEFT:
+      snakeX--;
+      break;
+    case RIGHT:
+      snakeX++;
+      break;
+  }
+
+  // Yılanın ekranın etrafında dolaşması sağlanır
+  snakeX = (snakeX + SCREEN_WIDTH) % SCREEN_WIDTH;
+  snakeY = (snakeY + SCREEN_HEIGHT) % SCREEN_HEIGHT;
+
+  // Yılan segmentleri güncellenir
+  for (int i = snakeLength - 1; i > 0; i--) {
+    snakeSegmentsX[i] = snakeSegmentsX[i - 1];
+    snakeSegmentsY[i] = snakeSegmentsY[i - 1];
+  }
+  snakeSegmentsX[0] = snakeX;
+  snakeSegmentsY[0] = snakeY;
+}
+
+void checkCollision() {
+  // Yılanın kendisiyle çarpışıp çarpmadığı kontrol edilir
+  for (int i = 1; i < snakeLength; i++) {
+    if (snakeX == snakeSegmentsX[i] && snakeY == snakeSegmentsY[i]) {
+      gameover = true;
+display.clearDisplay();
+  display.setCursor(SCREEN_WIDTH / 4, SCREEN_HEIGHT / 2 - 8);
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+  display.println("Game Over!");
+display.display();
+      break;
+    }
+  }
+}
+
+void checkFood() {
+  // Yılanın yiyeceği yemesi kontrol edilir
+  if (snakeX == foodX && snakeY == foodY) {
+    score++;
+    spawnFood();
+
+    // Yılan uzunluğu artırılır
+    if (snakeLength < maxSegments) {
+      // Yılanın bir segmenti daha eklenir
+      snakeSegmentsX[snakeLength] = snakeX;
+      snakeSegmentsY[snakeLength] = snakeY;
+      snakeLength++;
+    }
+  }
+}
+void spawnFood() {
+  // Yeni yiyecek koordinatları belirlenir
+  foodX = random(SCREEN_WIDTH);
+  foodY = random(SCREEN_HEIGHT);
+}
+
+void drawScreen() {
+  display.clearDisplay();
+
+  // Yılan çizilir
+  for (int i = 0; i < snakeLength; i++) {
+    display.fillRect(snakeSegmentsX[i], snakeSegmentsY[i], 5, 5, SSD1306_WHITE);
+  }
+
+  // Yiyecek çizilir
+  display.fillRect(foodX, foodY, 5, 5, SSD1306_WHITE);
+
+  // Skor çizilir
+  display.setTextSize(1);
+  display.setTextColor(SSD1306_WHITE);
+  display.setCursor(0, 0);
+  display.print("Score: ");
+  display.println(score);
+
+  display.display();
+  delay(0);
+}
